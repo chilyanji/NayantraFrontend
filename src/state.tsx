@@ -144,11 +144,30 @@ type LiveState = {
 };
 const Live = createContext<LiveState>(null!);
 export const useLive = () => useContext(Live);
+// The dashboard summarizes all visible cameras; cameraStatus requires a camera ID.
+export async function loadCameraSummary(signal: AbortSignal): Promise<Row> {
+  const cameras = await api.aiCameras(signal);
+  return {
+    cameras,
+    running: cameras.some((camera) => camera.running === true),
+    // Both flags must belong to the same camera to count as an online feed.
+    connected: cameras.some(
+      (camera) => camera.running === true && camera.connected === true,
+    ),
+    error: cameras
+      .filter((camera) => camera.error)
+      .map(
+        (camera) =>
+          `${camera.camera_name || camera.camera_id || "Camera"}: ${displayText(camera.error)}`,
+      )
+      .join("; "),
+  };
+}
 export function LiveProvider({ children }: { children: ReactNode }) {
   const { session, isAdmin, notice } = useAuth();
   const id = session!.token;
   const health = useResource(api.aiHealth, `health-${id}`, 5000),
-    status = useResource(api.cameraStatus, `status-${id}`, 5000),
+    status = useResource(loadCameraSummary, `status-${id}`, 5000),
     detections = useResource(api.detections, `detections-${id}`, 3000),
     cameras = useResource(
       (s) => api.cameras(isAdmin, s),
